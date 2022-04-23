@@ -144,9 +144,6 @@ def get_metadata_for_collection(api_key, contract_address, output):
                         attributes_df["asset_id"] = int(nft["id"]["tokenId"], 16)
                         if nft["media"] is not None:
                             attributes_df["image"] = nft["media"][0]["raw"]
-                        if nft['tokenUri'] is not None:
-                            if nft['tokenUri']['raw'] is not None:
-                                attributes_df["nft_id"] = nft['tokenUri']['raw'][nft['tokenUri']['raw'].rfind('/')+1:]
                         del metadata["attributes"]
                         for key in metadata.keys():
                             attributes_df[key] = metadata[key]
