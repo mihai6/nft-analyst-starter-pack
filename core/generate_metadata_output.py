@@ -7,7 +7,7 @@ import pandas as pd
 def generate_metadata_output(raw_attributes_file, token_ids_file, output):
     # Read from raw attributes file and drop nulls
     raw_attributes = pd.read_csv(raw_attributes_file)
-    raw_attributes = raw_attributes[raw_attributes["trait_type"].notnull()]
+    traits = raw_attributes[raw_attributes["trait_type"].notnull()]
 
     # Read from token ids file
     token_ids = open(token_ids_file).readlines()
@@ -15,7 +15,7 @@ def generate_metadata_output(raw_attributes_file, token_ids_file, output):
 
     # Determine the attribute count of each item and calculate rarity
     attribute_count = (
-        raw_attributes.groupby("asset_id").size().reset_index(name="attribute_count")
+        traits.groupby("asset_id").size().reset_index(name="attribute_count")
     )
     attribute_count_rarity = (
         attribute_count.groupby("attribute_count")
@@ -28,7 +28,7 @@ def generate_metadata_output(raw_attributes_file, token_ids_file, output):
 
     # Determine the trait for each category and calculate rarity
     trait_rarity = (
-        raw_attributes.groupby(["trait_type", "value"])
+        traits.groupby(["trait_type", "value"])
         .size()
         .reset_index(name="trait_rarity")
     )
@@ -48,7 +48,7 @@ def generate_metadata_output(raw_attributes_file, token_ids_file, output):
     )
 
     # Join and transpose trait data
-    categories = raw_attributes[["asset_id", "value", "trait_type"]]
+    categories = traits[["asset_id", "value", "trait_type"]]
     categories = categories.merge(
         trait_rarity[["trait_type", "value", "trait_rarity_score"]],
         on=["trait_type", "value"],
@@ -119,7 +119,15 @@ def generate_metadata_output(raw_attributes_file, token_ids_file, output):
     # Clean up dataframe for output
     for name in distinct_trait_types:
         nft_df.drop(columns=[name], axis=1, inplace=True)
-    nft_df = nft_df.drop_duplicates(subset=["asset_id"])
+
+    other_metadata = {k:v for k,v in raw_attributes.items() if k not in nft_df.columns.to_list()+['trait_type','value']}
+    nft_df.insert(0, column='nft_id', value=other_metadata['nft_id'])
+    del other_metadata['nft_id']
+    
+    for col in other_metadata.keys():
+        nft_df[col] = other_metadata[col]
+
+    nft_df = nft_df.drop_duplicates(subset=['nft_id','asset_id'])
 
     # Output metadata to CSV file
     nft_df.to_csv(output, index=False)
