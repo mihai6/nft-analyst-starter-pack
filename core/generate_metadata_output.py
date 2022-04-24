@@ -15,7 +15,7 @@ def generate_metadata_output(raw_attributes_file, token_ids_file, output):
 
     # Determine the attribute count of each item and calculate rarity
     attribute_count = (
-        traits.groupby("asset_id").size().reset_index(name="attribute_count")
+        traits[traits['value']!='None'].groupby("asset_id").size().reset_index(name="attribute_count")
     )
     attribute_count_rarity = (
         attribute_count.groupby("attribute_count")
@@ -119,6 +119,11 @@ def generate_metadata_output(raw_attributes_file, token_ids_file, output):
     nft_df["overall_rarity_score"] = nft_df[
         [col for col in nft_df.columns if col.endswith("_rarity_score")]
     ].sum(axis=1)
+    nft_df["overall_rarity_score_without_trait_count"] = nft_df.loc[:,'overall_rarity_score']-nft_df.loc[:,'attribute_count_rarity_score']
+    nft_df["overall_rarity_score_33pct_trait_count"]   = nft_df.loc[:,'overall_rarity_score']-nft_df.loc[:,'attribute_count_rarity_score']*2/3
+    nft_df["rank"] = nft_df["overall_rarity_score"].rank(ascending=False)
+    nft_df["rank_without_trait_count"] = nft_df["overall_rarity_score_without_trait_count"].rank(ascending=False)
+    nft_df["rank_33pct_trait_count"] = nft_df["overall_rarity_score_33pct_trait_count"].rank(ascending=False)
 
     # Clean up dataframe for output
     for name in distinct_trait_types:
