@@ -117,8 +117,6 @@ def export_data(contract_address, alchemy_api_key, metadata_only, rarity_only):
         delete=False
     ) as transaction_hashes_txt, tempfile.NamedTemporaryFile(
         delete=False
-    ) as token_ids_txt, tempfile.NamedTemporaryFile(
-        delete=False
     ) as raw_attributes_csv:
 
         # run only if metadata_only is False
@@ -156,12 +154,6 @@ def export_data(contract_address, alchemy_api_key, metadata_only, rarity_only):
                 input_filename=transfers_csv,
                 output_filename=transaction_hashes_txt.name,
                 column="transaction_hash",
-            )
-
-            extract_unique_column_value(
-                input_filename=transfers_csv,
-                output_filename=token_ids_txt.name,
-                column="value",
             )
 
             # Export logs
@@ -220,7 +212,6 @@ def export_data(contract_address, alchemy_api_key, metadata_only, rarity_only):
         # Generate metadata output
         generate_metadata_output(
             raw_attributes_file=attributes_file,
-            token_ids_file=token_ids_txt.name,
             output=metadata_csv,
         )
 

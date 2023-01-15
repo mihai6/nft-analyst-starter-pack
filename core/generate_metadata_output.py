@@ -4,14 +4,13 @@ import numpy as np
 import pandas as pd
 
 
-def generate_metadata_output(raw_attributes_file, token_ids_file, output):
+def generate_metadata_output(raw_attributes_file, output):
     # Read from raw attributes file and drop nulls
     raw_attributes = pd.read_csv(raw_attributes_file)
     traits = raw_attributes[raw_attributes["trait_type"].notnull()]
 
     # Read from token ids file
-    token_ids = open(token_ids_file).readlines()
-    num_tokens = max(len(token_ids),1)
+    num_tokens = len(traits["asset_id"].unique())
 
     # Determine the attribute count of each item and calculate rarity
     attribute_count = (
