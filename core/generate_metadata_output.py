@@ -11,7 +11,7 @@ def generate_metadata_output(raw_attributes_file, token_ids_file, output):
 
     # Read from token ids file
     token_ids = open(token_ids_file).readlines()
-    num_tokens = len(token_ids)
+    num_tokens = max(len(token_ids),1)
 
     # Determine the attribute count of each item and calculate rarity
     attribute_count = (
