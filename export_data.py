@@ -48,7 +48,23 @@ from utils.find_deployment_block_for_contract import find_deployment_block_for_c
     type=str,
     help="The contract address of the desired NFT collection.",
 )
-def export_data(contract_address, alchemy_api_key):
+@click.option(
+    "-m",
+    "--metadata-only",
+    required=False,
+    type=bool,
+    is_flag=True,
+    help="Whether to only extract the metadata and calculate rarity.",
+)
+@click.option(
+    "-r",
+    "--rarity-only",
+    required=False,
+    type=bool,
+    is_flag=True,
+    help="Whether to only calculate rarity from raw_attributes.csv.",
+)
+def export_data(contract_address, alchemy_api_key, metadata_only, rarity_only):
 
     if (alchemy_api_key is None) or (alchemy_api_key == ""):
         raise Exception("Alchemy API key is required.")
@@ -73,20 +89,26 @@ def export_data(contract_address, alchemy_api_key):
 
     # Set provider
     provider_uri = "https://eth-mainnet.alchemyapi.io/v2/" + alchemy_api_key
+    local_provider = "http://localhost:8545"
     web3 = Web3(Web3.HTTPProvider(provider_uri))
+    local3 = Web3(Web3.HTTPProvider(local_provider))
     eth_service = EthService(web3)
-    ethereum_etl_batch_size = 1000
-    ethereum_etl_max_workers = 8
+    local_service = EthService(local3)
+    ethereum_etl_batch_size = 2000
+    ethereum_etl_max_workers = 1
+    local_etl_batch_size = 1000
+    local_etl_max_workers = 8
 
     # Get block range
-    start_block = find_deployment_block_for_contract(contract_address, web3)
-    print(
-        "Contract {} appears to have been deployed at block {}".format(
-            contract_address, start_block
+    if not metadata_only and not rarity_only:
+        start_block = find_deployment_block_for_contract(contract_address, local3)
+        print(
+            "Contract {} appears to have been deployed at block {}".format(
+                contract_address, start_block
+            )
         )
-    )
-    yesterday = datetime.today() - timedelta(days=1)
-    _, end_block = eth_service.get_block_range_for_date(yesterday)
+        yesterday = datetime.today() - timedelta(days=1)
+        _, end_block = eth_service.get_block_range_for_date(yesterday)
 
     # Create tempfiles
     with tempfile.NamedTemporaryFile(
@@ -95,28 +117,13 @@ def export_data(contract_address, alchemy_api_key):
         delete=False
     ) as transaction_hashes_txt, tempfile.NamedTemporaryFile(
         delete=False
-    ) as token_ids_txt, tempfile.NamedTemporaryFile(
-        delete=False
     ) as raw_attributes_csv:
 
-        # Export token transfers
-        export_token_transfers(
-            start_block=start_block,
-            end_block=end_block,
-            batch_size=ethereum_etl_batch_size,
-            provider_uri=provider_uri,
-            max_workers=ethereum_etl_max_workers,
-            tokens=contract_address,
-            output=transfers_csv,
-        )
+        # run only if metadata_only is False
+        if not metadata_only and not rarity_only:
 
-        # If there are no 721 transfers, export 1155 transfers
-        if os.stat(transfers_csv).st_size == 0:
-            print(
-                "No ERC-721 transfers were identified.",
-                "Therefore, searching for and extracting any ERC-1155 transfers.",
-            )
-            export_1155_transfers(
+            # Export token transfers
+            export_token_transfers(
                 start_block=start_block,
                 end_block=end_block,
                 batch_size=ethereum_etl_batch_size,
@@ -126,69 +133,91 @@ def export_data(contract_address, alchemy_api_key):
                 output=transfers_csv,
             )
 
-        # Create staging files
-        extract_unique_column_value(
-            input_filename=transfers_csv,
-            output_filename=transaction_hashes_txt.name,
-            column="transaction_hash",
-        )
+            # If there are no 721 transfers, export 1155 transfers
+            if os.stat(transfers_csv).st_size == 0:
+                print(
+                    "No ERC-721 transfers were identified.",
+                    "Therefore, searching for and extracting any ERC-1155 transfers.",
+                )
+                export_1155_transfers(
+                    start_block=start_block,
+                    end_block=end_block,
+                    batch_size=ethereum_etl_batch_size,
+                    provider_uri=provider_uri,
+                    max_workers=ethereum_etl_max_workers,
+                    tokens=contract_address,
+                    output=transfers_csv,
+                )
 
-        extract_unique_column_value(
-            input_filename=transfers_csv,
-            output_filename=token_ids_txt.name,
-            column="value",
-        )
+            # Create staging files
+            extract_unique_column_value(
+                input_filename=transfers_csv,
+                output_filename=transaction_hashes_txt.name,
+                column="transaction_hash",
+            )
 
-        # Export logs
-        export_logs(
-            start_block=start_block,
-            end_block=end_block,
-            batch_size=ethereum_etl_batch_size,
-            provider_uri=provider_uri,
-            max_workers=ethereum_etl_max_workers,
-            tx_hashes_filename=transaction_hashes_txt.name,
-            output=logs_csv.name,
-        )
+            # Export logs
+            export_logs(
+                start_block=start_block,
+                end_block=end_block,
+                batch_size=ethereum_etl_batch_size,
+                provider_uri=provider_uri,
+                max_workers=ethereum_etl_max_workers,
+                tx_hashes_filename=transaction_hashes_txt.name,
+                output=logs_csv.name,
+            )
 
-        # Update date block mapping
-        update_block_to_date_mapping(
-            filename=date_block_mapping_csv, eth_service=eth_service
-        )
+            # Update date block mapping
+            update_block_to_date_mapping(
+                filename=date_block_mapping_csv, eth_service=eth_service
+            )
 
-        # Update ETH prices
-        update_eth_prices(filename=eth_prices_csv)
+            # Update ETH prices
+            update_eth_prices(filename=eth_prices_csv)
 
-        # Generate sales output
-        generate_sales_output(
-            transfers_file=transfers_csv,
-            logs_file=logs_csv.name,
-            date_block_mapping_file=date_block_mapping_csv,
-            eth_prices_file=eth_prices_csv,
-            output=sales_csv,
-        )
+            # Generate sales output
+            generate_sales_output(
+                transfers_file=transfers_csv,
+                logs_file=logs_csv.name,
+                date_block_mapping_file=date_block_mapping_csv,
+                eth_prices_file=eth_prices_csv,
+                output=sales_csv,
+            )
 
-        # Generate transfers output
-        generate_transfers_output(
-            transfers_file=transfers_csv,
-            date_block_mapping_file=date_block_mapping_csv,
-            output=transfers_csv,
-        )
+            # Generate transfers output
+            generate_transfers_output(
+                transfers_file=transfers_csv,
+                date_block_mapping_file=date_block_mapping_csv,
+                output=transfers_csv,
+            )
 
-        # Fetch metadata
-        get_metadata_for_collection(
-            api_key=alchemy_api_key,
-            contract_address=contract_address,
-            output=raw_attributes_csv.name,
-        )
+            print("Data exported to transfers.csv, sales.csv", end="")
+
+        if not rarity_only:
+            # Fetch metadata
+            get_metadata_for_collection(
+                api_key=alchemy_api_key,
+                contract_address=contract_address,
+                output=raw_attributes_csv.name,
+            )
+
+            # copy raw_attributes_csv.name to another file
+            # sys("cp " + raw_attributes_csv.name + " raw_attributes.csv")
+            os.system("cp " + raw_attributes_csv.name + " raw_attributes.csv")
+            attributes_file = raw_attributes_csv.name
+            print(", metadata.csv", end="")
+        else: # if rarity_only is True
+            attributes_file = "raw_attributes.csv"
 
         # Generate metadata output
         generate_metadata_output(
-            raw_attributes_file=raw_attributes_csv.name,
-            token_ids_file=token_ids_txt.name,
+            raw_attributes_file=attributes_file,
             output=metadata_csv,
         )
 
-        print("Data exported to transfers.csv, sales.csv and metadata.csv")
+        if not metadata_only and not rarity_only:
+            print(", and ", end="")
+        print("calculated rarities.")
 
 
 if __name__ == "__main__":

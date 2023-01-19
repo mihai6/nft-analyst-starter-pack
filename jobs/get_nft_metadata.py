@@ -139,12 +139,14 @@ def get_metadata_for_collection(api_key, contract_address, output):
                 nft_list = j["nfts"]
                 for nft in nft_list:
                     try:
-                        attributes_raw = nft["metadata"]["attributes"]
-                        attributes_df = pd.DataFrame(attributes_raw)
+                        metadata=nft["metadata"]
+                        attributes_df = pd.DataFrame(metadata["attributes"])
                         attributes_df["asset_id"] = int(nft["id"]["tokenId"], 16)
-                        attributes_df = attributes_df[
-                            ["value", "trait_type", "asset_id"]
-                        ]
+                        if nft["media"] is not None:
+                            attributes_df["image"] = nft["media"][0]["raw"]
+                        del metadata["attributes"]
+                        for key in metadata.keys():
+                            attributes_df[key] = metadata[key]
                         raw_attributes = raw_attributes.append(
                             attributes_df, ignore_index=True
                         )
